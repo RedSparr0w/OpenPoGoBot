@@ -5,7 +5,8 @@ import time
 from pgoapi.utilities import f2i
 from pokemongo_bot import logger
 from pokemongo_bot.human_behaviour import sleep
-from pokemongo_bot.cell_workers.utils import distance, format_dist, format_time
+from pokemongo_bot.utils import format_time
+from pokemongo_bot.cell_workers.recycle_items_worker import RecycleItemsWorker
 
 
 class SeenFortWorker(object):
@@ -13,43 +14,15 @@ class SeenFortWorker(object):
     def __init__(self, fort, bot):
         self.fort = fort
         self.api = bot.api
+        self.bot = bot
         self.position = bot.position
         self.config = bot.config
         self.item_list = bot.item_list
-        self.rest_time = 50
-        self.stepper = bot.stepper
 
     def work(self):
         lat = self.fort["latitude"]
         lng = self.fort["longitude"]
-        unit = self.config.distance_unit  # Unit to use when printing formatted distance
-
-        fort_id = self.fort["id"]
-        dist = distance(self.position[0], self.position[1], lat, lng)
-
-        logger.log("[#] Found fort {} at distance {}".format(fort_id, format_dist(dist, unit)))
-
-        if dist > 0:
-            logger.log("[#] Need to move closer to Pokestop")
-            position = (lat, lng, 0.0)
-
-            if self.config.walk > 0:
-                self.stepper.walk_to(self.config.walk, *position)
-            else:
-                self.api.set_position(*position)
-            self.api.player_update(latitude=lat, longitude=lng)
-            logger.log("[#] Arrived at Pokestop")
-            sleep(2)
-
-        self.api.fort_details(fort_id=self.fort["id"],
-                              latitude=lat,
-                              longitude=lng)
-        response_dict = self.api.call()
-        fort_details = response_dict.get("responses", {}).get("FORT_DETAILS", {})
-        fort_name = fort_details.get("name").encode("utf8", "replace")
-        fort_name = fort_name if fort_name is not None else "Unknown"
-        logger.log("[#] Now at Pokestop: " + fort_name + " - Spinning...",
-                   "yellow")
+        logger.log("Spinning...", "yellow")
         sleep(3)
         self.api.fort_search(fort_id=self.fort["id"],
                              fort_latitude=lat,
@@ -57,6 +30,8 @@ class SeenFortWorker(object):
                              player_latitude=f2i(self.position[0]),
                              player_longitude=f2i(self.position[1]))
         response_dict = self.api.call()
+        if response_dict is None:
+            return
         spin_details = response_dict.get("responses", {}).get("FORT_SEARCH", {})
         spin_result = spin_details.get("result")
         if spin_result == 1:
@@ -83,6 +58,9 @@ class SeenFortWorker(object):
 
                     logger.log("[+] " + str(item_count) + "x " + item_name,
                                "green")
+                if self.config.recycle_items:
+                    recycle_worker = RecycleItemsWorker(self.bot)
+                    recycle_worker.work()
 
             else:
                 logger.log("[#] Nothing found.", "yellow")
@@ -118,12 +96,4 @@ class SeenFortWorker(object):
             logger.log("[#] Inventory is full, switching to catch mode...", "red")
             self.config.mode = "poke"
 
-        if "chain_hack_sequence_number" in fort_details:
-            time.sleep(2)
-            return fort_details[
-                "chain_hack_sequence_number"]
-        else:
-            logger.log("[#] may search too often, lets have a rest", "yellow")
-            return 11
-        sleep(10)
-        return 0
+        sleep(2)

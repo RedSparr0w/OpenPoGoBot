@@ -6,7 +6,7 @@ import json
 from s2sphere import CellId, LatLng
 from pgoapi.utilities import f2i
 from pokemongo_bot.human_behaviour import sleep, random_lat_long_delta
-from pokemongo_bot.cell_workers.utils import distance, i2f, format_time
+from pokemongo_bot.utils import distance, i2f, format_time, convert_to_utf8
 import pokemongo_bot.logger as logger
 
 
@@ -36,7 +36,7 @@ class Stepper(object):
             position = (i2f(position_lat), i2f(position_lng), 0.0)
 
         self.api.set_position(*position)
-        self._work_at_position(position[0], position[1], position[2], True)
+        self._work_at_position(position[0], position[1], True)
         sleep(5)
 
     def walk_to(self, speed, lat, lng, alt):
@@ -59,9 +59,8 @@ class Stepper(object):
                 sleep(1)  # sleep one second plus a random delta
 
                 position_lat, position_lng, _ = self.api.get_position()
-                self._work_at_position(i2f(position_lat), i2f(position_lng), alt, False)
+                self._work_at_position(i2f(position_lat), i2f(position_lng), False)
 
-            self.api.set_position(lat, lng, alt)
             self.bot.heartbeat()
             logger.log("[#] Finished walking")
 
@@ -80,7 +79,7 @@ class Stepper(object):
             prev_cell = prev_cell.prev()
         return sorted(walk)
 
-    def _work_at_position(self, lat, lng, alt, pokemon_only=False):
+    def _work_at_position(self, lat, lng, pokemon_only=False):
         cell_id = self._get_cell_id_from_latlong()
         timestamp = [0, ] * len(cell_id)
         self.api.get_map_objects(latitude=f2i(lat),
@@ -89,18 +88,20 @@ class Stepper(object):
                                  cell_id=cell_id)
 
         response_dict = self.api.call()
+        if response_dict is None:
+            return
         # Passing data through last-location and location
         map_objects = response_dict.get("responses", {}).get("GET_MAP_OBJECTS")
         if map_objects is not None:
             with open("web/location-{}.json".format(self.config.username), "w") as outfile:
-                json.dump({"lat": lat, "lng": lng, "cells": map_objects.get("map_cells")}, outfile)
+                json.dump({"lat": lat, "lng": lng, "cells": convert_to_utf8(map_objects.get("map_cells"))}, outfile)
             with open("data/last-location-{}.json".format(self.config.username), "w") as outfile:
                 outfile.truncate()
                 json.dump({"lat": lat, "lng": lng}, outfile)
             if "status" in map_objects:
                 if map_objects.get("status") is 1:
                     map_cells = map_objects.get("map_cells")
-                    position = lat, lng, alt
                 # Sort all by distance from current pos - eventually this should build graph and A* it
                 map_cells.sort(key=lambda x: distance(lat, lng, x["forts"][0]["latitude"], x["forts"][0]["longitude"]) if "forts" in x and x["forts"] != [] else 1e6)
-                self.bot.work_on_cell(map_cells, position, pokemon_only)
+                for cell in map_cells:
+                    self.bot.work_on_cell(cell, pokemon_only)

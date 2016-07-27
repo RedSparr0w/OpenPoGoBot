@@ -1,5 +1,9 @@
 from __future__ import print_function
 import time
+
+from pokemongo_bot.event_manager import manager
+from pokemongo_bot.utils import convert_to_utf8
+
 try:
     #pylint: disable=import-error
     import lcd
@@ -10,15 +14,18 @@ except ImportError:
     LCD = None
 
 
-def log(string, color='white'):
+def log(string, color='black', fire_event=True):
     color_hex = {
         'green': '92m',
         'yellow': '93m',
         'red': '91m'
     }
-    if color not in color_hex:
-        print('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + string)
-    else:
-        print(u'\033[' + color_hex[color] + "[" + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + string.decode('utf-8') + '\033[0m')
+    string = convert_to_utf8(string)
+    if fire_event:
+        manager.fire("logging", output=string, color=color)
+    output = '[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + string
+    if color in color_hex:
+        output = "\033[" + color_hex[color] + output + "\033[0m"
+    print(output)
     if LCD is not None and string is not None:
         LCD.message(string)

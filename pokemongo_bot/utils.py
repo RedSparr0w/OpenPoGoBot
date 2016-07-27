@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+# pylint: disable=redefined-builtin
+from builtins import bytes, str
 import struct
 import time
 
@@ -107,13 +109,21 @@ def i2f(input_int):
     return struct.unpack('<d', struct.pack('<Q', input_int))[0]
 
 
-def print_green(message):
-    print(u'\033[92m' + message.decode('utf-8') + '\033[0m')
-
-
-def print_yellow(message):
-    print(u'\033[93m' + message.decode('utf-8') + '\033[0m')
-
-
-def print_red(message):
-    print(u'\033[91m' + message.decode('utf-8') + '\033[0m')
+# pylint: disable=too-many-return-statements
+def convert_to_utf8(data):
+    if isinstance(data, bytes):
+        return data.decode()
+    elif isinstance(data, str):
+        return str(data)
+    elif isinstance(data, int):
+        return int(data)
+    elif isinstance(data, float):
+        return float(data)
+    elif isinstance(data, dict):
+        return dict(map(convert_to_utf8, data.items()))
+    elif isinstance(data, tuple):
+        return tuple(map(convert_to_utf8, data))
+    elif isinstance(data, list):
+        return list(map(convert_to_utf8, data))
+    elif isinstance(data, set):
+        return set(map(convert_to_utf8, data))
